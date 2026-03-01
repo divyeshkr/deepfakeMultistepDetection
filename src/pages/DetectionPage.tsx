@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { FileUpload } from '@/components/FileUpload';
-import { AudioRecorder } from '@/components/AudioRecorder';
 import { AlertCircle, CheckCircle, Loader2, ShieldAlert, UserCheck, UserX } from 'lucide-react';
 import axios from 'axios';
-import { cn } from '@/lib/utils';
-
-/* ---------------------- IMPORTANT ---------------------- */
-/* Make sure VITE_API_URL is added in Vercel settings     */
-/* ------------------------------------------------------- */
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -23,7 +16,6 @@ type Stage =
 interface DeepfakeResult {
   prediction: 'real' | 'deepfake';
   confidence: number;
-  note?: string;
 }
 
 interface VerificationResult {
@@ -45,7 +37,7 @@ export default function DetectionPage() {
     if (!suspiciousFile) return;
 
     if (!API_URL) {
-      setError("API URL not configured. Check Vercel environment variables.");
+      setError("API URL not configured.");
       return;
     }
 
@@ -57,7 +49,6 @@ export default function DetectionPage() {
 
     try {
       const response = await axios.post(`${API_URL}/detect`, formData);
-
       setDeepfakeResult(response.data);
 
       setTimeout(() => {
@@ -66,17 +57,11 @@ export default function DetectionPage() {
         } else {
           setStage('result_deepfake');
         }
-      }, 1200);
+      }, 1000);
 
     } catch (err: any) {
       console.error(err);
-
-      if (err.response) {
-        setError(err.response.data?.detail || "Backend returned an error.");
-      } else {
-        setError("Cannot connect to backend. It may be sleeping (Render cold start). Wait 30 seconds and retry.");
-      }
-
+      setError(err.response?.data?.detail || "Backend error or cold start. Try again.");
       setStage('upload');
     }
   };
@@ -99,22 +84,15 @@ export default function DetectionPage() {
 
     try {
       const response = await axios.post(`${API_URL}/verify`, formData);
-
       setVerificationResult(response.data);
 
       setTimeout(() => {
         setStage('final_result');
-      }, 1200);
+      }, 1000);
 
     } catch (err: any) {
       console.error(err);
-
-      if (err.response) {
-        setError(err.response.data?.detail || "Verification failed.");
-      } else {
-        setError("Cannot connect to backend.");
-      }
-
+      setError(err.response?.data?.detail || "Verification failed.");
       setStage('verification_input');
     }
   };
@@ -143,7 +121,9 @@ export default function DetectionPage() {
         {/* ================= Upload Stage ================= */}
         {stage === 'upload' && (
           <>
-            <h2 className="text-xl font-semibold mb-4 text-center">Upload Suspicious Audio</h2>
+            <h2 className="text-xl font-semibold mb-4 text-center">
+              Upload Suspicious Audio
+            </h2>
 
             <FileUpload
               selectedFile={suspiciousFile}
@@ -173,29 +153,77 @@ export default function DetectionPage() {
         {stage === 'result_deepfake' && deepfakeResult?.prediction === 'deepfake' && (
           <div className="text-center py-6">
             <ShieldAlert className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-red-600">Deepfake Detected</h2>
+            <h2 className="text-2xl font-bold text-red-600">
+              Deepfake Detected
+            </h2>
             <p>Confidence: {(deepfakeResult.confidence * 100).toFixed(1)}%</p>
-            <button onClick={reset} className="mt-6 px-6 py-2 bg-slate-900 text-white rounded-lg">
+            <button
+              onClick={reset}
+              className="mt-6 px-6 py-2 bg-slate-900 text-white rounded-lg"
+            >
               Start Over
             </button>
           </div>
         )}
 
-        {/* ================= Verification Result ================= */}
+        {/* ================= REAL → Verification Input ================= */}
+        {stage === 'verification_input' && (
+          <div className="text-center py-6">
+
+            <CheckCircle className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
+
+            <h2 className="text-2xl font-bold text-emerald-600">
+              Audio is Real
+            </h2>
+
+            <p className="mb-6">
+              Upload reference voice for verification.
+            </p>
+
+            <FileUpload
+              selectedFile={referenceFile}
+              onFileSelect={setReferenceFile}
+              label="Upload Reference Voice"
+            />
+
+            <button
+              onClick={handleVerification}
+              disabled={!referenceFile}
+              className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Verify Speaker
+            </button>
+
+          </div>
+        )}
+
+        {/* ================= Final Result ================= */}
         {stage === 'final_result' && verificationResult && (
           <div className="text-center py-6">
+
             {verificationResult.verified ? (
               <UserCheck className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
             ) : (
               <UserX className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
             )}
+
             <h2 className="text-2xl font-bold">
-              {verificationResult.verified ? "Identity Verified" : "Different Speaker"}
+              {verificationResult.verified
+                ? "Identity Verified"
+                : "Different Speaker"}
             </h2>
-            <p>Similarity: {(verificationResult.similarity * 100).toFixed(1)}%</p>
-            <button onClick={reset} className="mt-6 px-6 py-2 bg-slate-900 text-white rounded-lg">
+
+            <p>
+              Similarity: {(verificationResult.similarity * 100).toFixed(1)}%
+            </p>
+
+            <button
+              onClick={reset}
+              className="mt-6 px-6 py-2 bg-slate-900 text-white rounded-lg"
+            >
               Start New Detection
             </button>
+
           </div>
         )}
 
