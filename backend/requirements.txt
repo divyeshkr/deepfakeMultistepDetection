@@ -1,8 +1,8 @@
 fastapi
 uvicorn
-python-multipart
-scikit-learn
-librosa
 numpy
-soundfile
+librosa
+scikit-learn
 joblib
+soundfile
+python-multipart
