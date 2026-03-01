@@ -21,25 +21,23 @@ def load_models():
 
 def extract_mfcc_features(file_path):
     try:
-        # Load audio (resample to 16k mono)
-        y, sr = librosa.load(file_path, sr=22050, mono=True)
+        # 🔥 EXACT SAME AS NOTEBOOK TRAINING
+        # DO NOT CHANGE THESE PARAMETERS
+        y, sr = librosa.load(
+            file_path,
+            duration=3,
+            offset=0.5
+        )
 
-        # Extract MFCC (13)
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-
-        # Delta
         delta = librosa.feature.delta(mfcc)
-
-        # Delta-Delta
         delta2 = librosa.feature.delta(mfcc, order=2)
 
-        # Stack
-        combined = np.vstack((mfcc, delta, delta2))
+        combined = np.vstack([mfcc, delta, delta2])
 
-        # Mean only (IMPORTANT)
         mean_features = np.mean(combined, axis=1)
 
-        return mean_features  # length = 39
+        return mean_features  # 39 features
 
     except Exception as e:
         raise Exception(f"Feature extraction failed: {e}")
