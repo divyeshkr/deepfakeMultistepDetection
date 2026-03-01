@@ -4,7 +4,12 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
-from utils import load_models, extract_mfcc_features, compute_cosine_similarity
+from utils import (
+    load_models,
+    extract_deepfake_features,
+    extract_speaker_features,
+    compute_cosine_similarity
+)
 
 app = FastAPI(title="Deepfake Detection & Speaker Verification System")
 
@@ -17,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load models once at startup
+# Load deepfake model
 MODEL, SCALER = load_models()
 
 UPLOAD_DIR = "temp_uploads"
@@ -28,58 +33,45 @@ def cleanup_file(path: str):
     try:
         if os.path.exists(path):
             os.remove(path)
-    except Exception as e:
-        print("Cleanup error:", e)
+    except:
+        pass
 
 
 @app.get("/")
 async def root():
-    return {"message": "Deepfake Detection API is running"}
+    return {"message": "API Running"}
 
 
+# ===============================
+# STAGE 1 - DEEPFAKE DETECTION
+# ===============================
 @app.post("/detect")
 async def detect_deepfake(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     if MODEL is None or SCALER is None:
-        raise HTTPException(status_code=500, detail="Models not loaded")
+        raise HTTPException(status_code=500, detail="Deepfake model not loaded")
 
     file_id = str(uuid.uuid4())
-    ext = file.filename.split('.')[-1]
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.{ext}")
+    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.wav")
 
     try:
-        # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract 39 features
-        features = extract_mfcc_features(file_path)
+        features = extract_deepfake_features(file_path)
 
         if len(features) != 39:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Feature size mismatch: got {len(features)}, expected 39"
-            )
+            raise HTTPException(status_code=500, detail="Feature size mismatch")
 
         features = features.reshape(1, -1)
-
-        # Scale
         features_scaled = SCALER.transform(features)
 
-        # Predict
         prediction = MODEL.predict(features_scaled)[0]
 
-        # Map numeric labels
-        if str(prediction) == "0":
-            label = "real"
-        elif str(prediction) == "1":
-            label = "deepfake"
-        else:
-            label = str(prediction).lower()
+        label = "real" if str(prediction) == "0" else "deepfake"
 
-        # Confidence (if available)
         try:
             probs = MODEL.predict_proba(features_scaled)[0]
             confidence = float(np.max(probs))
@@ -98,17 +90,17 @@ async def detect_deepfake(
         background_tasks.add_task(cleanup_file, file_path)
 
 
+# ===============================
+# STAGE 2 - SPEAKER VERIFICATION
+# ===============================
 @app.post("/verify")
 async def verify_speaker(
     suspicious_audio: UploadFile = File(...),
     reference_audio: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    sus_id = str(uuid.uuid4())
-    ref_id = str(uuid.uuid4())
-
-    sus_path = os.path.join(UPLOAD_DIR, f"sus_{sus_id}.wav")
-    ref_path = os.path.join(UPLOAD_DIR, f"ref_{ref_id}.wav")
+    sus_path = os.path.join(UPLOAD_DIR, f"sus_{uuid.uuid4()}.wav")
+    ref_path = os.path.join(UPLOAD_DIR, f"ref_{uuid.uuid4()}.wav")
 
     try:
         with open(sus_path, "wb") as buffer:
@@ -117,12 +109,15 @@ async def verify_speaker(
         with open(ref_path, "wb") as buffer:
             shutil.copyfileobj(reference_audio.file, buffer)
 
-        feat_sus = extract_mfcc_features(sus_path)
-        feat_ref = extract_mfcc_features(ref_path)
+        feat_sus = extract_speaker_features(sus_path)
+        feat_ref = extract_speaker_features(ref_path)
+
+        if feat_sus is None or feat_ref is None:
+            raise HTTPException(status_code=400, detail="Audio too short")
 
         similarity = compute_cosine_similarity(feat_sus, feat_ref)
 
-        THRESHOLD = 0.60
+        THRESHOLD = 0.85
         verified = similarity >= THRESHOLD
 
         return {
