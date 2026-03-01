@@ -22,7 +22,7 @@ def load_models():
 def extract_mfcc_features(file_path):
     try:
         # Load audio (resample to 16k mono)
-        y, sr = librosa.load(file_path, sr=16000, mono=True)
+        y, sr = librosa.load(file_path, sr=22050, mono=True)
 
         # Extract MFCC (13)
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
