@@ -117,7 +117,7 @@ async def verify_speaker(
 
         similarity = compute_cosine_similarity(feat_sus, feat_ref)
 
-        THRESHOLD = 0.85
+        THRESHOLD = 0.91
         verified = similarity >= THRESHOLD
 
         return {
